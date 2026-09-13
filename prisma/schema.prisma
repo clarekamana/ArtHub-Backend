@@ -1,0 +1,318 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  GUEST
+  ARTIST
+  MODERATOR
+  SUPER_ADMIN
+}
+
+enum AccountTier {
+  FREE
+  VERIFIED
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE // no login for 12 months (Section 9.4)
+  BANNED
+  PENDING_DELETION // 30-day grace period
+  DELETED
+}
+
+enum FileCategory {
+  RASTER_IMAGE
+  VECTOR_DESIGN
+  THREE_D_NATIVE // .blend, .max, .c4d
+  THREE_D_INTERCHANGE // .fbx, .obj, .stl, .dae
+  THREE_D_WEB_READY // .gltf, .glb
+  ARCHIVE // .zip
+}
+
+enum LicenseType {
+  CC_BY
+  PERSONAL_PORTFOLIO_USE_ONLY
+  ALL_RIGHTS_RESERVED_VIEW_ONLY
+  FREE_TO_REUSE_WITH_CREDIT
+}
+
+enum UploadStatus {
+  AWAITING_UPLOAD // presigned URL issued, bytes not yet confirmed
+  QUARANTINED // bytes landed in private bucket, awaiting scan (Section 4.2 step 4)
+  SCANNING
+  SCAN_FAILED // malware / policy violation - never promoted
+  PUBLISHED // promoted to public bucket (Section 4.2 step 7)
+  TAKEN_DOWN // moderation removal
+  DELETED
+}
+
+enum ConversionStatus {
+  NOT_APPLICABLE
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum StorageTier {
+  HOT
+  WARM
+  COLD
+}
+
+enum ReportStatus {
+  OPEN
+  ACTIONED
+  DISMISSED
+}
+
+enum ReportReason {
+  COPYRIGHT
+  INAPPROPRIATE
+  SPAM
+  MALWARE_SUSPECTED
+  OTHER
+}
+
+// ── Core: Users ──────────────────────────────────────────────────────────
+
+model User {
+  id              String        @id @default(uuid())
+  email           String        @unique
+  passwordHash    String? // null for OAuth-only accounts
+  oauthGoogleSub  String?       @unique
+  displayName     String
+  bio             String?
+  avatarStorageKey String?
+  links           String[]      @default([])
+  role            UserRole      @default(ARTIST)
+  tier            AccountTier   @default(FREE)
+  status          AccountStatus @default(ACTIVE)
+  isArtistMode    Boolean       @default(true) // FR-1.3: artist (uploader) vs viewer-only
+  storageUsedBytes BigInt       @default(0) // sum of original file sizes (derivatives excluded, Section 9.1)
+  lastLoginAt     DateTime?
+  deletionRequestedAt DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  uploads         Upload[]
+  likes           Like[]
+  comments        Comment[]
+  followedBy      Follow[]      @relation("following")
+  following       Follow[]      @relation("follower")
+  reportsFiled    Report[]      @relation("reporter")
+  moderationActions ModerationAction[] @relation("moderator")
+  collections     Collection[]
+  banHistory      ModerationAction[] @relation("targetUser")
+
+  @@index([email])
+  @@index([status])
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followingId])
+}
+
+// ── Uploads (Section 4.7 data model, extended) ──────────────────────────
+
+model Upload {
+  id          String       @id @default(uuid())
+  uploaderId  String
+  title       String
+  description String?
+  category    FileCategory
+  licenseType LicenseType?
+  externalLink String? // for files >2GB not hosted natively (Section 9.3)
+
+  originalFilename  String
+  mimeType          String
+  fileSizeBytes     BigInt
+  sha256Checksum    String?
+
+  // Object storage pointers - DB holds keys only, never bytes (Section 4.1 / 4.7)
+  storageKeyOriginal   String?
+  storageKeyPreviewGlb String?
+  storageKeyThumbnail  String?
+
+  storageTier       StorageTier  @default(HOT)
+  uploadStatus      UploadStatus @default(AWAITING_UPLOAD)
+  conversionStatus  ConversionStatus @default(NOT_APPLICABLE)
+  conversionError   String?
+  blenderVersion    String? // logged for troubleshooting failed conversions (Section 4.3)
+
+  viewCount   Int @default(0)
+  likeCount   Int @default(0)
+
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime? // soft delete; hard-purged after 30 days (FR-2.5 / Section 9.4)
+
+  uploader User @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  tags     UploadTag[]
+  versions UploadVersion[]
+  likes    Like[]
+  comments Comment[]
+  reports  Report[]
+  collectionItems CollectionItem[]
+
+  @@index([uploaderId])
+  @@index([category])
+  @@index([uploadStatus])
+  @@index([createdAt])
+}
+
+// Soft version history: previous file kept retrievable for 30 days (FR-2.5)
+model UploadVersion {
+  id               String   @id @default(uuid())
+  uploadId         String
+  storageKeyOriginal String
+  fileSizeBytes    BigInt
+  sha256Checksum   String?
+  replacedAt       DateTime @default(now())
+  purgeAfter       DateTime // replacedAt + 30 days
+
+  upload Upload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@index([purgeAfter])
+}
+
+model Tag {
+  id    String @id @default(uuid())
+  name  String @unique
+  uploads UploadTag[]
+}
+
+model UploadTag {
+  uploadId String
+  tagId    String
+
+  upload Upload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([uploadId, tagId])
+  @@index([tagId])
+}
+
+// ── Community (FR-5) ─────────────────────────────────────────────────────
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  uploadId  String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  upload Upload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, uploadId])
+  @@index([uploadId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  userId    String
+  uploadId  String
+  body      String
+  createdAt DateTime @default(now())
+  deletedAt DateTime?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  upload Upload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@index([uploadId])
+}
+
+// ── Collections (FR-4.3) ─────────────────────────────────────────────────
+
+model Collection {
+  id          String   @id @default(uuid())
+  ownerId     String
+  title       String
+  description String?
+  isCurated   Boolean  @default(false) // club-run showcases/challenges
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  items CollectionItem[]
+}
+
+model CollectionItem {
+  id           String   @id @default(uuid())
+  collectionId String
+  uploadId     String
+  addedAt      DateTime @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  upload     Upload     @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, uploadId])
+}
+
+// ── Moderation (FR-6) ─────────────────────────────────────────────────────
+
+model Report {
+  id         String       @id @default(uuid())
+  reporterId String
+  uploadId   String
+  reason     ReportReason
+  details    String?
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  reporter User   @relation("reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  upload   Upload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([uploadId])
+}
+
+// Section 9.3: the only path to exceed the standard per-category size cap
+// (up to the 2GB absolute ceiling) - always a deliberate prior admin action.
+model SizeExceptionApproval {
+  id            String       @id @default(uuid())
+  userId        String
+  approvedById  String
+  category      FileCategory
+  maxBytes      BigInt
+  reason        String?
+  usedByUploadId String?     @unique
+  createdAt     DateTime     @default(now())
+  expiresAt     DateTime?
+
+  @@index([userId])
+}
+
+model ModerationAction {
+  id           String   @id @default(uuid())
+  moderatorId  String
+  targetUserId String?
+  targetUploadId String?
+  action       String // e.g. "warn", "ban", "remove_upload", "quota_adjust"
+  reason       String?
+  createdAt    DateTime @default(now())
+
+  moderator  User @relation("moderator", fields: [moderatorId], references: [id], onDelete: Cascade)
+  targetUser User? @relation("targetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([targetUserId])
+}
