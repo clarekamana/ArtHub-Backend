@@ -9,6 +9,38 @@ import { quotaForTier } from "../../utils/quota";
 export const usersRouter = Router();
 
 // FR-1.2: public artist profile with portfolio grid
+/**
+ * @openapi
+ * /users/{id}:
+ *   get:
+ *     summary: Get a public artist profile
+ *     tags: [Users]
+ *     security: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Public profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id: { type: string, format: uuid }
+ *                 displayName: { type: string }
+ *                 bio: { type: string, nullable: true }
+ *                 avatarUrl: { type: string, nullable: true }
+ *                 links: { type: array, items: { type: string } }
+ *                 isArtistMode: { type: boolean }
+ *                 tier: { type: string }
+ *                 uploadCount: { type: integer }
+ *                 followerCount: { type: integer }
+ *                 followingCount: { type: integer }
+ *       404: { $ref: '#/components/responses/NotFound' }
+ */
 usersRouter.get(
   "/:id",
   optionalAuth,
@@ -36,6 +68,30 @@ usersRouter.get(
   })
 );
 
+/**
+ * @openapi
+ * /users/{id}/portfolio:
+ *   get:
+ *     summary: List a user's published portfolio uploads
+ *     tags: [Users]
+ *     security: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Up to 60 most recently published uploads
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 uploads:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/UploadDto' }
+ */
 usersRouter.get(
   "/:id/portfolio",
   optionalAuth,
@@ -56,6 +112,39 @@ const updateProfileSchema = z.object({
   isArtistMode: z.boolean().optional(),
 });
 
+/**
+ * @openapi
+ * /users/me:
+ *   patch:
+ *     summary: Update the current user's profile
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               displayName: { type: string, minLength: 2, maxLength: 60 }
+ *               bio: { type: string, maxLength: 500 }
+ *               links: { type: array, items: { type: string, format: uri }, maxItems: 10 }
+ *               isArtistMode: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Updated profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id: { type: string, format: uuid }
+ *                 displayName: { type: string }
+ *                 bio: { type: string, nullable: true }
+ *                 links: { type: array, items: { type: string } }
+ *                 isArtistMode: { type: boolean }
+ *       400: { $ref: '#/components/responses/ValidationError' }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ */
 usersRouter.patch(
   "/me",
   requireAuth,
@@ -74,6 +163,17 @@ usersRouter.patch(
 
 // Section 9.4: deletion request starts the 30-day grace period; a moderator/lifecycle
 // job performs the hard purge afterwards, and the account can be restored on request until then.
+/**
+ * @openapi
+ * /users/me/delete:
+ *   post:
+ *     summary: Request account deletion
+ *     description: Starts the 30-day grace period (Section 9.4). A moderator/lifecycle job performs the hard purge afterwards; the account can be restored until then via /users/me/restore.
+ *     tags: [Users]
+ *     responses:
+ *       204: { description: Deletion requested }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ */
 usersRouter.post(
   "/me/delete",
   requireAuth,
@@ -86,6 +186,21 @@ usersRouter.post(
   })
 );
 
+/**
+ * @openapi
+ * /users/me/restore:
+ *   post:
+ *     summary: Cancel a pending account deletion
+ *     tags: [Users]
+ *     responses:
+ *       204: { description: Account restored to active }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ *       409:
+ *         description: Account is not pending deletion
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 usersRouter.post(
   "/me/restore",
   requireAuth,
@@ -98,6 +213,25 @@ usersRouter.post(
 );
 
 // Section 9.1: current quota usage, exposed so the client can show "1.2GB / 2GB"
+/**
+ * @openapi
+ * /users/me/quota:
+ *   get:
+ *     summary: Get the current user's storage quota usage
+ *     tags: [Users]
+ *     responses:
+ *       200:
+ *         description: Quota usage
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 usedBytes: { type: string, example: "104857600" }
+ *                 quotaBytes: { type: string, example: "2147483648" }
+ *                 tier: { type: string }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ */
 usersRouter.get(
   "/me/quota",
   requireAuth,

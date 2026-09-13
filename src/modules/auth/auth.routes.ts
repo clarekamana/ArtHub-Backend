@@ -15,6 +15,37 @@ const registerSchema = z.object({
 });
 
 // FR-1.1: register via email (OAuth handled by oauthGoogleLogin below)
+/**
+ * @openapi
+ * /auth/register:
+ *   post:
+ *     summary: Register a new account with email/password
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password, displayName]
+ *             properties:
+ *               email: { type: string, format: email }
+ *               password: { type: string, format: password, minLength: 8 }
+ *               displayName: { type: string, minLength: 2, maxLength: 60 }
+ *     responses:
+ *       201:
+ *         description: Account created
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/AuthResponse' }
+ *       400: { $ref: '#/components/responses/ValidationError' }
+ *       409:
+ *         description: Email already registered
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 authRouter.post(
   "/register",
   asyncHandler(async (req, res) => {
@@ -38,6 +69,40 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
+/**
+ * @openapi
+ * /auth/login:
+ *   post:
+ *     summary: Log in with email/password
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email: { type: string, format: email }
+ *               password: { type: string, format: password }
+ *     responses:
+ *       200:
+ *         description: Logged in
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/AuthResponse' }
+ *       401:
+ *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       403:
+ *         description: Account banned
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 authRouter.post(
   "/login",
   asyncHandler(async (req, res) => {
@@ -65,6 +130,40 @@ const oauthSchema = z.object({
   displayName: z.string().min(2).max(60),
 });
 
+/**
+ * @openapi
+ * /auth/oauth/google:
+ *   post:
+ *     summary: Sign in or register via Google OAuth
+ *     description: >
+ *       Accepts a verified Google sub/email from the client's Google Sign-In flow.
+ *       Real deployments should verify the ID token server-side; stubbed here as
+ *       the MVP boundary since it requires Google credentials.
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [googleSub, email, displayName]
+ *             properties:
+ *               googleSub: { type: string }
+ *               email: { type: string, format: email }
+ *               displayName: { type: string, minLength: 2, maxLength: 60 }
+ *     responses:
+ *       200:
+ *         description: Logged in / account linked or created
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/AuthResponse' }
+ *       403:
+ *         description: Account banned
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 authRouter.post(
   "/oauth/google",
   asyncHandler(async (req, res) => {
@@ -87,6 +186,23 @@ authRouter.post(
   })
 );
 
+/**
+ * @openapi
+ * /auth/me:
+ *   get:
+ *     summary: Get the current authenticated user
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: Current user
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user: { $ref: '#/components/schemas/PublicUser' }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ */
 authRouter.get(
   "/me",
   requireAuth,

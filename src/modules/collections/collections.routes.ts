@@ -14,6 +14,34 @@ const createSchema = z.object({
 });
 
 // FR-4.3: user portfolios/collections; isCurated=true reserved for club-run showcases
+/**
+ * @openapi
+ * /collections:
+ *   post:
+ *     summary: Create a collection
+ *     description: isCurated=true is reserved for club-run showcases and requires a MODERATOR or SUPER_ADMIN role.
+ *     tags: [Collections]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title]
+ *             properties:
+ *               title: { type: string, minLength: 1, maxLength: 120 }
+ *               description: { type: string, maxLength: 1000 }
+ *               isCurated: { type: boolean }
+ *     responses:
+ *       201:
+ *         description: Collection created
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Collection' }
+ *       400: { $ref: '#/components/responses/ValidationError' }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ *       403: { $ref: '#/components/responses/Forbidden' }
+ */
 collectionsRouter.post(
   "/",
   requireAuth,
@@ -32,6 +60,33 @@ collectionsRouter.post(
   })
 );
 
+/**
+ * @openapi
+ * /collections/{id}:
+ *   get:
+ *     summary: Get a collection with its published items
+ *     tags: [Collections]
+ *     security: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Collection with items
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/Collection'
+ *                 - type: object
+ *                   properties:
+ *                     items:
+ *                       type: array
+ *                       items: { $ref: '#/components/schemas/UploadDto' }
+ *       404: { $ref: '#/components/responses/NotFound' }
+ */
 collectionsRouter.get(
   "/:id",
   optionalAuth,
@@ -50,6 +105,30 @@ collectionsRouter.get(
   })
 );
 
+/**
+ * @openapi
+ * /collections/{id}/items/{uploadId}:
+ *   post:
+ *     summary: Add an upload to a collection
+ *     tags: [Collections]
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - name: uploadId
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       204: { description: Item added (idempotent) }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ *       404:
+ *         description: Collection not found or not owned by the current user
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 collectionsRouter.post(
   "/:id/items/:uploadId",
   requireAuth,
@@ -66,6 +145,30 @@ collectionsRouter.post(
   })
 );
 
+/**
+ * @openapi
+ * /collections/{id}/items/{uploadId}:
+ *   delete:
+ *     summary: Remove an upload from a collection
+ *     tags: [Collections]
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - name: uploadId
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       204: { description: Item removed (idempotent) }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ *       404:
+ *         description: Collection not found or not owned by the current user
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 collectionsRouter.delete(
   "/:id/items/:uploadId",
   requireAuth,

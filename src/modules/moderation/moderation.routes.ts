@@ -10,6 +10,46 @@ export const moderationRouter = Router();
 moderationRouter.use(requireAuth, requireRole("MODERATOR", "SUPER_ADMIN"));
 
 // FR-6.2: storage dashboard - total usage, per-user usage, largest files, conversion queues
+/**
+ * @openapi
+ * /admin/dashboard:
+ *   get:
+ *     summary: Storage & moderation dashboard
+ *     description: Total usage, top users by storage, largest files, conversion queue counts, open reports. Requires MODERATOR or SUPER_ADMIN.
+ *     tags: [Moderation]
+ *     responses:
+ *       200:
+ *         description: Dashboard data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalStorageBytes: { type: string }
+ *                 topUsersByStorage:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string, format: uuid }
+ *                       displayName: { type: string }
+ *                       storageUsedBytes: { type: string }
+ *                       tier: { type: string }
+ *                 largestFiles:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string, format: uuid }
+ *                       title: { type: string }
+ *                       fileSizeBytes: { type: string }
+ *                       uploaderId: { type: string, format: uuid }
+ *                 conversionsPending: { type: integer }
+ *                 conversionsFailed: { type: integer }
+ *                 openReports: { type: integer }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ *       403: { $ref: '#/components/responses/Forbidden' }
+ */
 moderationRouter.get(
   "/dashboard",
   asyncHandler(async (_req, res) => {
@@ -44,6 +84,30 @@ moderationRouter.get(
 );
 
 // FR-6.1: review flagged content
+/**
+ * @openapi
+ * /admin/reports:
+ *   get:
+ *     summary: List content reports
+ *     tags: [Moderation]
+ *     parameters:
+ *       - name: status
+ *         in: query
+ *         schema: { type: string, enum: [OPEN, ACTIONED, DISMISSED], default: OPEN }
+ *     responses:
+ *       200:
+ *         description: Reports, newest first
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 reports:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Report' }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ *       403: { $ref: '#/components/responses/Forbidden' }
+ */
 moderationRouter.get(
   "/reports",
   asyncHandler(async (req, res) => {
@@ -62,6 +126,34 @@ const resolveReportSchema = z.object({
   reason: z.string().max(500).optional(),
 });
 
+/**
+ * @openapi
+ * /admin/reports/{id}/resolve:
+ *   post:
+ *     summary: Resolve a content report
+ *     tags: [Moderation]
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [action]
+ *             properties:
+ *               action: { type: string, enum: [remove_upload, dismiss] }
+ *               reason: { type: string, maxLength: 500 }
+ *     responses:
+ *       204: { description: Report resolved }
+ *       400: { $ref: '#/components/responses/ValidationError' }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ *       403: { $ref: '#/components/responses/Forbidden' }
+ *       404: { $ref: '#/components/responses/NotFound' }
+ */
 moderationRouter.post(
   "/reports/:id/resolve",
   asyncHandler(async (req, res) => {
@@ -94,6 +186,29 @@ moderationRouter.post(
 // FR-6.1: warn/ban users
 const banSchema = z.object({ reason: z.string().max(500).optional() });
 
+/**
+ * @openapi
+ * /admin/users/{id}/ban:
+ *   post:
+ *     summary: Ban a user
+ *     tags: [Moderation]
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason: { type: string, maxLength: 500 }
+ *     responses:
+ *       204: { description: User banned }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ *       403: { $ref: '#/components/responses/Forbidden' }
+ */
 moderationRouter.post(
   "/users/:id/ban",
   asyncHandler(async (req, res) => {
@@ -108,6 +223,29 @@ moderationRouter.post(
   })
 );
 
+/**
+ * @openapi
+ * /admin/users/{id}/warn:
+ *   post:
+ *     summary: Warn a user
+ *     tags: [Moderation]
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason: { type: string, maxLength: 500 }
+ *     responses:
+ *       204: { description: Warning recorded }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ *       403: { $ref: '#/components/responses/Forbidden' }
+ */
 moderationRouter.post(
   "/users/:id/warn",
   asyncHandler(async (req, res) => {
@@ -122,6 +260,33 @@ moderationRouter.post(
 // FR-6.3 / Section 9.2: adjust per-user tier/quota (Verified Artist unlock)
 const tierSchema = z.object({ tier: z.nativeEnum(AccountTier) });
 
+/**
+ * @openapi
+ * /admin/users/{id}/tier:
+ *   post:
+ *     summary: Change a user's account tier
+ *     description: Adjusts per-user tier/quota, e.g. to unlock Verified Artist.
+ *     tags: [Moderation]
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [tier]
+ *             properties:
+ *               tier: { type: string, description: AccountTier enum value }
+ *     responses:
+ *       204: { description: Tier updated }
+ *       400: { $ref: '#/components/responses/ValidationError' }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ *       403: { $ref: '#/components/responses/Forbidden' }
+ */
 moderationRouter.post(
   "/users/:id/tier",
   asyncHandler(async (req, res) => {
@@ -145,6 +310,45 @@ const exceptionSchema = z.object({
   expiresInDays: z.number().int().positive().max(30).optional(),
 });
 
+/**
+ * @openapi
+ * /admin/size-exceptions:
+ *   post:
+ *     summary: Grant a one-time file-size exception
+ *     description: Up to the 2GB absolute ceiling (Section 9.3). Requires SUPER_ADMIN.
+ *     tags: [Moderation]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId, category, maxBytes]
+ *             properties:
+ *               userId: { type: string, format: uuid }
+ *               category: { type: string, description: FileCategory enum value }
+ *               maxBytes: { type: integer, minimum: 1, maximum: 2147483648 }
+ *               reason: { type: string, maxLength: 500 }
+ *               expiresInDays: { type: integer, minimum: 1, maximum: 30 }
+ *     responses:
+ *       201:
+ *         description: Exception approval created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id: { type: string, format: uuid }
+ *                 userId: { type: string, format: uuid }
+ *                 approvedById: { type: string, format: uuid }
+ *                 category: { type: string }
+ *                 maxBytes: { type: string }
+ *                 reason: { type: string, nullable: true }
+ *                 expiresAt: { type: string, format: date-time, nullable: true }
+ *       400: { $ref: '#/components/responses/ValidationError' }
+ *       401: { $ref: '#/components/responses/Unauthorized' }
+ *       403: { $ref: '#/components/responses/Forbidden' }
+ */
 moderationRouter.post(
   "/size-exceptions",
   requireRole("SUPER_ADMIN"),
