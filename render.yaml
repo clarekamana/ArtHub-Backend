@@ -5,7 +5,10 @@ services:
     plan: free
     region: oregon
     branch: main
-    buildCommand: npm install && npm run build
+    # --include=dev overrides npm's default of skipping devDependencies when
+    # NODE_ENV=production is set (which we need at runtime, below) - without it,
+    # typescript/@types/* aren't installed and the build fails.
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run render-start
     healthCheckPath: /health
     autoDeploy: true

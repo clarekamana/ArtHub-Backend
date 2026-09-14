@@ -63,7 +63,8 @@ instance type, so the free deploy runs the BullMQ workers in the same process as
    - `CDN_BASE_URL` — the public bucket's `r2.dev` URL or your custom domain
 4. **Backend — [Render](https://render.com)**: push this repo to GitHub, then either click
    "New > Blueprint" and point Render at `render.yaml`, or create the Web Service by hand with:
-   - Build command: `npm install && npm run build`
+   - Build command: `npm install --include=dev && npm run build` (the `--include=dev` is required
+     because `NODE_ENV=production` at runtime otherwise makes npm skip `typescript`/`@types/*` too)
    - Start command: `npm run render-start` (runs `prisma migrate deploy` before booting)
    - Health check path: `/health`
    Fill in the `sync: false` env vars from steps 1–3 in the Render dashboard, plus
