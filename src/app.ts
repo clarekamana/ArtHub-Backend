@@ -13,11 +13,17 @@ import { communityRouter } from "./modules/community/community.routes";
 import { collectionsRouter } from "./modules/collections/collections.routes";
 import { moderationRouter } from "./modules/moderation/moderation.routes";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
+import { env } from "./config/env";
 
 export const app = express();
 
 app.use(helmet());
-app.use(cors());
+app.use(
+  cors({
+    origin: env.corsOrigins.length ? env.corsOrigins : true,
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: "1mb" })); // file bytes never pass through this server (Section 4.1)
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 

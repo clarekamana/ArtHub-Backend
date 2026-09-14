@@ -12,7 +12,9 @@
     "start:worker": "node dist/workers/conversion.worker.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "postinstall": "prisma generate",
+    "render-start": "prisma migrate deploy && node dist/index.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.632.0",

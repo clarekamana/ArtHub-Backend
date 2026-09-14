@@ -19,6 +19,17 @@ export const env = {
   jwtSecret: required("JWT_SECRET", "dev-secret-change-me"),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
 
+  // Comma-separated list of allowed frontend origins, e.g. https://arthub.vercel.app
+  corsOrigins: (process.env.CORS_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+
+  // When true, this process also runs the BullMQ workers in-thread (Render free tier
+  // has no long-running Background Worker instance type, so the single free web
+  // service does double duty).
+  enableInProcessWorkers: (process.env.ENABLE_WORKERS ?? "false") === "true",
+
   databaseUrl: required("DATABASE_URL"),
   redisUrl: required("REDIS_URL", "redis://localhost:6379"),
 

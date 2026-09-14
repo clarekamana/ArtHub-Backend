@@ -1,0 +1,66 @@
+services:
+  - type: web
+    name: arthub-backend
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: npm run render-start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: APP_BASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ENABLE_WORKERS
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        value: auto
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_FORCE_PATH_STYLE
+        value: "true"
+      - key: S3_BUCKET_QUARANTINE
+        value: arthub-quarantine
+      - key: S3_BUCKET_PUBLIC
+        value: arthub-public
+      - key: S3_BUCKET_ARCHIVE
+        value: arthub-archive
+      - key: CDN_BASE_URL
+        sync: false
+      - key: PRESIGN_UPLOAD_TTL
+        value: "900"
+      - key: PRESIGN_DOWNLOAD_TTL
+        value: "14400"
+      - key: QUOTA_FREE_BYTES
+        value: "2147483648"
+      - key: QUOTA_VERIFIED_BYTES
+        value: "10737418240"
+      - key: MAX_FILE_SIZE_IMAGE
+        value: "20971520"
+      - key: MAX_FILE_SIZE_VECTOR
+        value: "104857600"
+      - key: MAX_FILE_SIZE_3D_STANDARD
+        value: "524288000"
+      - key: MAX_FILE_SIZE_3D_EXCEPTION
+        value: "2147483648"

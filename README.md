@@ -43,6 +43,41 @@ MinIO console is at http://localhost:9001 (minioadmin/minioadmin) — create the
 - `POST /api/collections`, `GET /api/collections/:id`, `POST/DELETE /api/collections/:id/items/:uploadId`
 - Admin (`MODERATOR`/`SUPER_ADMIN` only): `GET /api/admin/dashboard`, `GET /api/admin/reports`, `POST /api/admin/reports/:id/resolve`, `POST /api/admin/users/:id/ban|warn|tier`, `POST /api/admin/size-exceptions`
 
+## Deploying for free (Render + Neon + Upstash + Cloudflare R2)
+
+Render's free plan only covers a **Web Service** — there's no free Background Worker/Cron
+instance type, so the free deploy runs the BullMQ workers in the same process as the API
+(`ENABLE_WORKERS=true`, see `src/index.ts`). Split them into `npm run worker` /
+`npm run worker:lifecycle` on their own paid worker services later if the queue backs up.
+
+1. **Postgres — [Neon](https://neon.tech)**: create a free project, copy the pooled connection
+   string into `DATABASE_URL` (append `?sslmode=require` if Neon doesn't already include it).
+2. **Redis — [Upstash](https://upstash.com)**: create a free Redis database, copy the `rediss://`
+   connection string into `REDIS_URL`.
+3. **Object storage — [Cloudflare R2](https://developers.cloudflare.com/r2/)**: create three
+   buckets (`arthub-quarantine`, `arthub-public`, `arthub-archive`), an R2 API token
+   (Access Key ID/Secret), and enable public access (or a custom domain) on `arthub-public` for
+   `CDN_BASE_URL`. R2 is S3-compatible, so no code changes are needed:
+   - `S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com`
+   - `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` — from the R2 API token
+   - `CDN_BASE_URL` — the public bucket's `r2.dev` URL or your custom domain
+4. **Backend — [Render](https://render.com)**: push this repo to GitHub, then either click
+   "New > Blueprint" and point Render at `render.yaml`, or create the Web Service by hand with:
+   - Build command: `npm install && npm run build`
+   - Start command: `npm run render-start` (runs `prisma migrate deploy` before booting)
+   - Health check path: `/health`
+   Fill in the `sync: false` env vars from steps 1–3 in the Render dashboard, plus
+   `APP_BASE_URL` (your Render URL) and `CORS_ORIGINS` (your deployed frontend origin, comma-separated,
+   no trailing slash).
+5. **Frontend — [Vercel](https://vercel.com) or [Netlify](https://netlify.com)**: point it at
+   `https://<your-service>.onrender.com/api` as the API base URL.
+
+**Free-tier caveats:** the Render free web service spins down after 15 minutes idle, so the
+first request after a lull cold-starts (10–50s) and in-process workers won't drain the queue
+while asleep — a queued job runs as soon as the next request wakes the service. Neon/Upstash
+free tiers also idle/pause on their own schedules; expect a similar cold-start on the DB/Redis
+side after inactivity.
+
 ## Not yet wired (explicitly out of MVP code, per SRS boundaries)
 
 - Real ClamAV/AV integration and real sandboxed Blender container invocation (interfaces exist, stubbed).
